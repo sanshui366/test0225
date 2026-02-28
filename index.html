@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>贪吃蛇小游戏</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0f172a;
+      --panel: #111827;
+      --grid: #1f2937;
+      --snake: #22c55e;
+      --head: #4ade80;
+      --food: #f43f5e;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --accent: #38bdf8;
+    }
+
+    * {
+      box-sizing: border-box;
+      font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: radial-gradient(circle at top, #1e293b, var(--bg) 65%);
+      color: var(--text);
+    }
+
+    .game-wrap {
+      width: min(92vw, 560px);
+      background: color-mix(in srgb, var(--panel) 85%, black);
+      border: 1px solid #374151;
+      border-radius: 16px;
+      box-shadow: 0 16px 50px rgba(0, 0, 0, 0.45);
+      padding: 18px;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.3rem;
+      letter-spacing: 0.5px;
+    }
+
+    .stats {
+      color: var(--muted);
+      font-size: 0.95rem;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .stats strong {
+      color: var(--accent);
+      font-weight: 700;
+      min-width: 2ch;
+      display: inline-block;
+      text-align: center;
+    }
+
+    canvas {
+      width: 100%;
+      aspect-ratio: 1/1;
+      display: block;
+      border-radius: 12px;
+      border: 1px solid #374151;
+      background:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+        #020617;
+      background-size: 5% 5%;
+    }
+
+    .controls {
+      margin-top: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    button {
+      appearance: none;
+      border: 0;
+      border-radius: 10px;
+      background: #2563eb;
+      color: white;
+      font-weight: 700;
+      padding: 9px 14px;
+      cursor: pointer;
+      transition: transform 0.14s ease, filter 0.14s ease;
+    }
+
+    button:hover {
+      filter: brightness(1.08);
+      transform: translateY(-1px);
+    }
+
+    button:active {
+      transform: translateY(1px);
+    }
+
+    .hint {
+      width: 100%;
+      color: var(--muted);
+      margin-top: 8px;
+      font-size: 0.84rem;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+  <main class="game-wrap">
+    <div class="header">
+      <h1>🐍 贪吃蛇小游戏</h1>
+      <div class="stats">
+        <span>得分：<strong id="score">0</strong></span>
+        <span>最高分：<strong id="highScore">0</strong></span>
+      </div>
+    </div>
+
+    <canvas id="game" width="500" height="500" aria-label="贪吃蛇游戏画布"></canvas>
+
+    <div class="controls">
+      <button id="restartBtn" type="button">重新开始</button>
+      <span id="status">按方向键开始游戏（WASD 也支持）</span>
+    </div>
+    <p class="hint">规则：吃到红色食物加分并变长，撞墙或撞到自己会结束。空格可暂停 / 继续。</p>
+  </main>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const highScoreEl = document.getElementById('highScore');
+    const statusEl = document.getElementById('status');
+    const restartBtn = document.getElementById('restartBtn');
+
+    const gridCount = 20;
+    const cellSize = canvas.width / gridCount;
+    const baseSpeed = 120;
+
+    const directionMap = {
+      ArrowUp: { x: 0, y: -1 },
+      ArrowDown: { x: 0, y: 1 },
+      ArrowLeft: { x: -1, y: 0 },
+      ArrowRight: { x: 1, y: 0 },
+      w: { x: 0, y: -1 },
+      s: { x: 0, y: 1 },
+      a: { x: -1, y: 0 },
+      d: { x: 1, y: 0 }
+    };
+
+    let snake;
+    let direction;
+    let pendingDirection;
+    let food;
+    let score;
+    let highScore = Number(localStorage.getItem('snake_high_score') || 0);
+    let playing = false;
+    let paused = false;
+    let gameTimer = null;
+
+    function resetGame() {
+      snake = [
+        { x: 10, y: 10 },
+        { x: 9, y: 10 },
+        { x: 8, y: 10 }
+      ];
+      direction = { x: 1, y: 0 };
+      pendingDirection = direction;
+      score = 0;
+      playing = false;
+      paused = false;
+      scoreEl.textContent = String(score);
+      highScoreEl.textContent = String(highScore);
+      statusEl.textContent = '按方向键开始游戏（WASD 也支持）';
+      spawnFood();
+      draw();
+    }
+
+    function spawnFood() {
+      const occupied = new Set(snake.map((part) => `${part.x},${part.y}`));
+      let next;
+      do {
+        next = {
+          x: Math.floor(Math.random() * gridCount),
+          y: Math.floor(Math.random() * gridCount)
+        };
+      } while (occupied.has(`${next.x},${next.y}`));
+      food = next;
+    }
+
+    function setDirection(nextDirection) {
+      if (!nextDirection) return;
+      const isReverse =
+        nextDirection.x === -direction.x &&
+        nextDirection.y === -direction.y;
+      if (!isReverse) {
+        pendingDirection = nextDirection;
+        if (!playing) {
+          playing = true;
+          statusEl.textContent = '游戏进行中...';
+        }
+      }
+    }
+
+    function tick() {
+      if (paused || !playing) {
+        draw();
+        return;
+      }
+
+      direction = pendingDirection;
+      const nextHead = {
+        x: snake[0].x + direction.x,
+        y: snake[0].y + direction.y
+      };
+
+      const hitWall =
+        nextHead.x < 0 ||
+        nextHead.y < 0 ||
+        nextHead.x >= gridCount ||
+        nextHead.y >= gridCount;
+
+      const hitSelf = snake.some((part) => part.x === nextHead.x && part.y === nextHead.y);
+
+      if (hitWall || hitSelf) {
+        gameOver();
+        return;
+      }
+
+      snake.unshift(nextHead);
+
+      if (nextHead.x === food.x && nextHead.y === food.y) {
+        score += 1;
+        scoreEl.textContent = String(score);
+        spawnFood();
+
+        if (score > highScore) {
+          highScore = score;
+          highScoreEl.textContent = String(highScore);
+          localStorage.setItem('snake_high_score', String(highScore));
+        }
+      } else {
+        snake.pop();
+      }
+
+      draw();
+    }
+
+    function drawRect(x, y, color) {
+      ctx.fillStyle = color;
+      ctx.fillRect(x * cellSize + 1, y * cellSize + 1, cellSize - 2, cellSize - 2);
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      drawRect(food.x, food.y, '#f43f5e');
+
+      snake.forEach((part, index) => {
+        const color = index === 0 ? '#4ade80' : '#22c55e';
+        drawRect(part.x, part.y, color);
+      });
+
+      if (!playing || paused) {
+        ctx.fillStyle = 'rgba(2, 6, 23, 0.58)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = '#e5e7eb';
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 30px sans-serif';
+        ctx.fillText(paused ? '已暂停' : '准备开始', canvas.width / 2, canvas.height / 2 - 8);
+
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '16px sans-serif';
+        ctx.fillText('按方向键移动', canvas.width / 2, canvas.height / 2 + 24);
+      }
+    }
+
+    function gameOver() {
+      playing = false;
+      statusEl.textContent = `游戏结束！本局得分 ${score}，点击“重新开始”再来一局。`;
+      draw();
+    }
+
+    function togglePause() {
+      if (!playing) return;
+      paused = !paused;
+      statusEl.textContent = paused ? '已暂停，按空格继续' : '游戏进行中...';
+      draw();
+    }
+
+    document.addEventListener('keydown', (event) => {
+      if (event.code === 'Space') {
+        event.preventDefault();
+        togglePause();
+        return;
+      }
+      const nextDirection = directionMap[event.key] || directionMap[event.key.toLowerCase?.()];
+      if (nextDirection) {
+        event.preventDefault();
+        setDirection(nextDirection);
+      }
+    });
+
+    restartBtn.addEventListener('click', () => {
+      resetGame();
+    });
+
+    resetGame();
+    gameTimer = setInterval(tick, baseSpeed);
+  </script>
+</body>
+</html>

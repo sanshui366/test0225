@@ -97,6 +97,31 @@
       font-size: 0.92rem;
     }
 
+    .menu {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text);
+      font-size: 0.9rem;
+    }
+
+    .menu select {
+      appearance: none;
+      border: 1px solid #4b5563;
+      border-radius: 8px;
+      background: #0b1220;
+      color: var(--text);
+      padding: 6px 10px;
+      font-size: 0.88rem;
+      cursor: pointer;
+      outline: none;
+    }
+
+    .menu select:focus {
+      border-color: #60a5fa;
+      box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.25);
+    }
+
     button {
       appearance: none;
       border: 0;
@@ -141,6 +166,16 @@
 
     <div class="controls">
       <button id="restartBtn" type="button">重新开始</button>
+      <label class="menu" for="snakeColorSelect">
+        蛇颜色：
+        <select id="snakeColorSelect" aria-label="选择蛇的颜色">
+          <option value="green" selected>经典绿</option>
+          <option value="blue">海洋蓝</option>
+          <option value="purple">霓虹紫</option>
+          <option value="orange">活力橙</option>
+          <option value="mono">黑白风</option>
+        </select>
+      </label>
       <span id="status">按方向键开始游戏（WASD 也支持）</span>
     </div>
     <p class="hint">规则：吃到红色食物加分并变长，撞墙或撞到自己会结束。空格可暂停 / 继续。</p>
@@ -153,6 +188,7 @@
     const highScoreEl = document.getElementById('highScore');
     const statusEl = document.getElementById('status');
     const restartBtn = document.getElementById('restartBtn');
+    const snakeColorSelect = document.getElementById('snakeColorSelect');
 
     const gridCount = 20;
     const cellSize = canvas.width / gridCount;
@@ -178,6 +214,15 @@
     let playing = false;
     let paused = false;
     let gameTimer = null;
+
+    const snakeColorThemes = {
+      green: { head: '#4ade80', body: '#22c55e' },
+      blue: { head: '#60a5fa', body: '#3b82f6' },
+      purple: { head: '#c084fc', body: '#a855f7' },
+      orange: { head: '#fb923c', body: '#f97316' },
+      mono: { head: '#f3f4f6', body: '#9ca3af' }
+    };
+    let snakeTheme = snakeColorThemes.green;
 
     function resetGame() {
       snake = [
@@ -278,7 +323,7 @@
       drawRect(food.x, food.y, '#f43f5e');
 
       snake.forEach((part, index) => {
-        const color = index === 0 ? '#4ade80' : '#22c55e';
+        const color = index === 0 ? snakeTheme.head : snakeTheme.body;
         drawRect(part.x, part.y, color);
       });
 
@@ -325,6 +370,11 @@
 
     restartBtn.addEventListener('click', () => {
       resetGame();
+    });
+
+    snakeColorSelect.addEventListener('change', () => {
+      snakeTheme = snakeColorThemes[snakeColorSelect.value] || snakeColorThemes.green;
+      draw();
     });
 
     resetGame();
